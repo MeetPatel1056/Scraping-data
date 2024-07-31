@@ -1,38 +1,34 @@
-import json
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
+import requests
 from bs4 import BeautifulSoup
-import time
+import pandas as pd
 
+def scrape_insider_trades(ticker):
+    url = f"https://www.insiderscreener.com/en/company/{ticker}"
 
-chrome_options = Options()
-chrome_options.add_experimental_option("detach", True)
+    response = requests.get(url)
+    response.raise_for_status()
 
-chrome_driver_path = r"C:/SeleniumDrivers/chromedriver.exe"
-service = Service(chrome_driver_path)
+    soup = BeautifulSoup(response.text, 'html.parser')
 
-driver = webdriver.Chrome(service=service, options=chrome_options)
-driver.get('https://www.insiderscreener.com/en/explore/au')
+    table = soup.find('table', class_='table table-sm text-dark')
 
+    if table is None:
+        print("No table found for ticker:", ticker)
+        return
 
-time.sleep(5)  
+    headers = [header.text.strip().replace('\n', ' ') for header in table.find_all('th')]
 
-soup = BeautifulSoup(driver.page_source, 'html.parser')
+    data = []
+    for row in table.find_all('tr')[1:]: 
+        cols = [col.text.strip().replace('\n', ' ') for col in row.find_all('td')]
+        data.append(cols)
 
+    df = pd.DataFrame(data, columns=headers)
 
-table = soup.find('table')  
-rows = table.find_all('tr')  
+    filename = f'insider_trades_{ticker}.json'
+    df.to_json(filename, orient='records', lines=True, indent=4)
 
-data = []
-header = [th.text.strip() for th in rows[0].find_all('th')]
+    print(f"Data has been scraped and saved to '{filename}'")
 
-for row in rows[1:]: 
-    values = [td.text.strip() for td in row.find_all('td')]
-    row_data = dict(zip(header, values))
-    data.append(row_data)
-
-with open('output.json', mode='w', encoding='utf-8') as file:
-    json.dump(data, file, ensure_ascii=False, indent=4)
-
-driver.quit()
+ticker = input("Enter the ticker symbol: ")
+scrape_insider_trades(ticker)
